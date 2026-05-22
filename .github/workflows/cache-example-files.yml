@@ -1,0 +1,51 @@
+# 样例 2：目录/文件缓存（固定 key，便于观察二次运行的 cache-hit）
+# 用途：第一次运行写入 marker；第二次同 branch 运行应 cache-hit 并读到相同内容
+# 触发：push 到 main，或手动 workflow_dispatch
+name: cache-example-files
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/cache-example-files.yml'
+      - 'cache-examples/files/**'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/cache@v4
+        id: file-cache
+        with:
+          path: cache-examples/files/.cache-demo
+          key: file-cache-${{ runner.os }}-${{ github.ref_name }}
+          restore-keys: |
+            file-cache-${{ runner.os }}-
+
+      - name: Restore or create cached marker
+        run: |
+          CACHE_DIR="cache-examples/files/.cache-demo"
+          mkdir -p "$CACHE_DIR"
+
+          if [ "${{ steps.file-cache.outputs.cache-hit }}" = "true" ]; then
+            echo "✅ Cache HIT — marker from previous run:"
+            cat "$CACHE_DIR/marker.txt"
+            exit 0
+          fi
+
+          echo "❌ Cache MISS — writing new marker"
+          {
+            echo "created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "run_id=${{ github.run_id }}"
+            echo "sha=${{ github.sha }}"
+          } > "$CACHE_DIR/marker.txt"
+          cat "$CACHE_DIR/marker.txt"
+
+      - name: Summary
+        run: |
+          echo "cache-hit: ${{ steps.file-cache.outputs.cache-hit }}"
+          echo "Re-run this workflow on the same branch to expect cache-hit=true."
