@@ -16,11 +16,44 @@ jobs:
     permissions:
       security-events: write   # 必须：用于上传扫描结果到 Security 页签
     steps:
-      - uses: actions/checkout@v4
-      - uses: github/codeql-action/init@v3
+      - uses: actions/checkout@v5
+      - uses: github/codeql-action/init@v4
         with:
           languages: javascript   # 仓库里需要存在该语言的代码，否则会失败
-      - uses: github/codeql-action/analyze@v3
+      - id: analyze
+        uses: github/codeql-action/analyze@v4
+      - name: Summary
+        run: |
+          echo "start ..." >> $GITHUB_STEP_SUMMARY
+      # 解析 SARIF 结果文件，把告警统计写进 Summary（job 级共享 $GITHUB_STEP_SUMMARY）
+      - name: 汇总 CodeQL 结果到 Summary
+        if: always()   # 即使扫描没发现问题也执行，保证输出摘要
+        shell: bash
+        run: |
+          SARIF_DIR="${{ steps.analyze.outputs.sarif-output }}"
+          SARIF_FILE="${SARIF_DIR}/javascript.sarif"
+          echo "### 🔍 CodeQL 扫描结果" >> $GITHUB_STEP_SUMMARY
+          if [ -f "$SARIF_FILE" ]; then
+            TOTAL=$(jq '.runs[0].results | length' "$SARIF_FILE")
+            ERROR=$(jq '[.runs[0].results[] | select(.level == "error")] | length' "$SARIF_FILE")
+            WARNING=$(jq '[.runs[0].results[] | select(.level == "warning")] | length' "$SARIF_FILE")
+            NOTE=$(jq '[.runs[0].results[] | select(.level == "note")] | length' "$SARIF_FILE")
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "| 级别 | 数量 |" >> $GITHUB_STEP_SUMMARY
+            echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔴 Error | $ERROR |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🟠 Warning | $WARNING |" >> $GITHUB_STEP_SUMMARY
+            echo "| 🔵 Note | $NOTE |" >> $GITHUB_STEP_SUMMARY
+            echo "| **合计** | **$TOTAL** |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**告警明细（规则 → 文件:行）**" >> $GITHUB_STEP_SUMMARY
+            jq -r '.runs[0].results[] | "`" + .ruleId + "` — " + .message.text + " → " + (.locations[0].physicalLocation.artifactLocation.uri // "?") + ":" + ((.locations[0].physicalLocation.region.startLine // 0) | tostring)' "$SARIF_FILE" \
+              | head -20 >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ 未找到 SARIF 结果文件（$SARIF_FILE），可能没有代码可扫描" >> $GITHUB_STEP_SUMMARY
+          fi
 
   # ========== Job 2：生成运行摘要（显示在 run 页顶部 Summary 页签） ==========
   summary:
