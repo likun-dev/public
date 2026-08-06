@@ -22,9 +22,6 @@ jobs:
           languages: javascript   # 仓库里需要存在该语言的代码，否则会失败
       - id: analyze
         uses: github/codeql-action/analyze@v4
-      - name: CodeQL Summary start
-        run: |
-          echo "CodeQL start ..." >> $GITHUB_STEP_SUMMARY
       # 解析 SARIF 结果文件，把告警统计写进 Summary（job 级共享 $GITHUB_STEP_SUMMARY）
       - name: 汇总 CodeQL 结果到 Summary
         if: always()   # 即使扫描没发现问题也执行，保证输出摘要
@@ -34,10 +31,14 @@ jobs:
           SARIF_FILE="${SARIF_DIR}/javascript.sarif"
           echo "### 🔍 CodeQL 扫描结果" >> $GITHUB_STEP_SUMMARY
           if [ -f "$SARIF_FILE" ]; then
-            TOTAL=$(jq '.runs[0].results | length' "$SARIF_FILE")
-            ERROR=$(jq '[.runs[0].results[] | select(.level == "error")] | length' "$SARIF_FILE")
-            WARNING=$(jq '[.runs[0].results[] | select(.level == "warning")] | length' "$SARIF_FILE")
-            NOTE=$(jq '[.runs[0].results[] | select(.level == "note")] | length' "$SARIF_FILE")
+            # 注意：CodeQL 的 SARIF 中 result 自身没有 level 字段，
+            # 级别在对应规则 .tool.driver.rules[].defaultConfiguration.level 里（缺失按 note 兜底），
+            # 所以不能直接 select(.level)，否则各级别会统计成 0（只有合计正确）。
+            LEVELS=$(jq -r '.runs[0] as $run | $run.results[] as $r | ($r.level // ($run.tool.driver.rules[$r.ruleIndex].defaultConfiguration.level // "note"))' "$SARIF_FILE")
+            TOTAL=$(echo "$LEVELS" | grep -c . || true)
+            ERROR=$(echo "$LEVELS" | grep -cx 'error' || true)
+            WARNING=$(echo "$LEVELS" | grep -cx 'warning' || true)
+            NOTE=$(echo "$LEVELS" | grep -cx 'note' || true)
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "| 级别 | 数量 |" >> $GITHUB_STEP_SUMMARY
             echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
@@ -54,9 +55,14 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "⚠️ 未找到 SARIF 结果文件（$SARIF_FILE），可能没有代码可扫描" >> $GITHUB_STEP_SUMMARY
           fi
-      - name: CodeQL Summary end
-        run: |
-          echo "CodeQL end ..." >> $GITHUB_STEP_SUMMARY
+      # 上传 SARIF 结果文件，跑完后可在 run 页底部 Artifacts 下载真实文件
+      - name: 上传 SARIF 文件
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: codeql-sarif
+          path: ${{ steps.analyze.outputs.sarif-output }}
+          if-no-files-found: warn   # 没有 SARIF 时只警告，不让 job 失败
 
   # ========== Job 2：生成运行摘要（显示在 run 页顶部 Summary 页签） ==========
   summary:
