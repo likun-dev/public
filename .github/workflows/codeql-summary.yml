@@ -31,10 +31,12 @@ jobs:
           SARIF_FILE="${SARIF_DIR}/javascript.sarif"
           echo "### 🔍 CodeQL 扫描结果" >> $GITHUB_STEP_SUMMARY
           if [ -f "$SARIF_FILE" ]; then
-            # 注意：CodeQL 的 SARIF 中 result 自身没有 level 字段，且可能没有 ruleIndex，
-            # 级别在对应规则 .tool.driver.rules[].defaultConfiguration.level 里（缺失按 note 兜底）。
-            # 因此按 ruleId 在规则表里查找级别，不能直接 select(.level)，也不能用 rules[.ruleIndex]（缺失会报错）。
-            LEVELS=$(jq -r '.runs[0] as $run | $run.results[] as $r | ($r.level // ([$run.tool.driver.rules[] | select(.id == $r.ruleId)][0].defaultConfiguration.level // "note"))' "$SARIF_FILE")
+            # 注意：CodeQL 的 SARIF 中 result 自身没有 level 字段，且可能没有 ruleIndex；
+            # 级别在规则的 defaultConfiguration.level 里，且规则定义可能在
+            # tool.driver.rules 或 tool.extensions[].rules（CodeQL 查询包扩展）中，
+            # 因此按 ruleId 到多处查找，查不到按 note 兜底。
+            # 用 .runs[] 遍历所有 run（多语言扫描时每种语言一个 run），不能用 .runs[0]。
+            LEVELS=$(jq -r '.runs[] as $run | $run.results[] as $r | ($r.level // ([first(($run.tool.driver.rules[]?, $run.tool.driver.extensions[]?.rules[]?, $run.tool.extensions[]?.rules[]?) | select(.id == $r.ruleId))][0].defaultConfiguration.level // "note"))' "$SARIF_FILE")
             TOTAL=$(echo "$LEVELS" | grep -c . || true)
             ERROR=$(echo "$LEVELS" | grep -cx 'error' || true)
             WARNING=$(echo "$LEVELS" | grep -cx 'warning' || true)
@@ -58,7 +60,7 @@ jobs:
       # 上传 SARIF 结果文件，跑完后可在 run 页底部 Artifacts 下载真实文件
       - name: 上传 SARIF 文件
         if: always()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: codeql-sarif
           path: ${{ steps.analyze.outputs.sarif-output }}
