@@ -58,7 +58,7 @@ jobs:
       # 上传 SARIF 结果文件，跑完后可在 run 页底部 Artifacts 下载真实文件
       - name: 上传 SARIF 文件
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: codeql-sarif
           path: ${{ steps.analyze.outputs.sarif-output }}
