@@ -1,0 +1,44 @@
+# 示例：CodeQL 安全扫描 + Action Summary 运行摘要
+# 使用方法：把本文件放到你的 GitHub 仓库 .github/workflows/ 目录下
+name: CodeQL + Summary 示例
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  # ========== Job 1：CodeQL 安全扫描 ==========
+  codeql:
+    name: CodeQL 安全扫描
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write   # 必须：用于上传扫描结果到 Security 页签
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: javascript   # 仓库里需要存在该语言的代码，否则会失败
+      - uses: github/codeql-action/analyze@v3
+
+  # ========== Job 2：生成运行摘要（显示在 run 页顶部 Summary 页签） ==========
+  summary:
+    name: 生成运行摘要
+    runs-on: ubuntu-latest
+    steps:
+      - name: 写入 Markdown 摘要
+        run: |
+          echo "## 🚀 本次运行报告" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| 项目 | 值 |" >> $GITHUB_STEP_SUMMARY
+          echo "| --- | --- |" >> $GITHUB_STEP_SUMMARY
+          echo "| 触发方式 | ${{ github.event_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 分支 | ${{ github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 提交 | ${{ github.sha }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| 提交人 | ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 检查清单" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] 代码拉取" >> $GITHUB_STEP_SUMMARY
+          echo "- [x] CodeQL 安全扫描" >> $GITHUB_STEP_SUMMARY
+          echo "- [ ] 人工确认" >> $GITHUB_STEP_SUMMARY
