@@ -31,10 +31,10 @@ jobs:
           SARIF_FILE="${SARIF_DIR}/javascript.sarif"
           echo "### 🔍 CodeQL 扫描结果" >> $GITHUB_STEP_SUMMARY
           if [ -f "$SARIF_FILE" ]; then
-            # 注意：CodeQL 的 SARIF 中 result 自身没有 level 字段，
-            # 级别在对应规则 .tool.driver.rules[].defaultConfiguration.level 里（缺失按 note 兜底），
-            # 所以不能直接 select(.level)，否则各级别会统计成 0（只有合计正确）。
-            LEVELS=$(jq -r '.runs[0] as $run | $run.results[] as $r | ($r.level // ($run.tool.driver.rules[$r.ruleIndex].defaultConfiguration.level // "note"))' "$SARIF_FILE")
+            # 注意：CodeQL 的 SARIF 中 result 自身没有 level 字段，且可能没有 ruleIndex，
+            # 级别在对应规则 .tool.driver.rules[].defaultConfiguration.level 里（缺失按 note 兜底）。
+            # 因此按 ruleId 在规则表里查找级别，不能直接 select(.level)，也不能用 rules[.ruleIndex]（缺失会报错）。
+            LEVELS=$(jq -r '.runs[0] as $run | $run.results[] as $r | ($r.level // ([$run.tool.driver.rules[] | select(.id == $r.ruleId)][0].defaultConfiguration.level // "note"))' "$SARIF_FILE")
             TOTAL=$(echo "$LEVELS" | grep -c . || true)
             ERROR=$(echo "$LEVELS" | grep -cx 'error' || true)
             WARNING=$(echo "$LEVELS" | grep -cx 'warning' || true)
