@@ -22,9 +22,9 @@ jobs:
           languages: javascript   # 仓库里需要存在该语言的代码，否则会失败
       - id: analyze
         uses: github/codeql-action/analyze@v4
-      - name: Summary
+      - name: CodeQL Summary start
         run: |
-          echo "start ..." >> $GITHUB_STEP_SUMMARY
+          echo "CodeQL start ..." >> $GITHUB_STEP_SUMMARY
       # 解析 SARIF 结果文件，把告警统计写进 Summary（job 级共享 $GITHUB_STEP_SUMMARY）
       - name: 汇总 CodeQL 结果到 Summary
         if: always()   # 即使扫描没发现问题也执行，保证输出摘要
@@ -54,6 +54,9 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "⚠️ 未找到 SARIF 结果文件（$SARIF_FILE），可能没有代码可扫描" >> $GITHUB_STEP_SUMMARY
           fi
+      - name: CodeQL Summary end
+        run: |
+          echo "CodeQL end ..." >> $GITHUB_STEP_SUMMARY
 
   # ========== Job 2：生成运行摘要（显示在 run 页顶部 Summary 页签） ==========
   summary:
